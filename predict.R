@@ -29,6 +29,7 @@ nCG = 4; # number of CpG in each segments
 min.Cover = 10; # min coverage to be counteds
 step = 2; # window moves 2 CpG each time
 i = 1; 
+
 while(i < length(ref.example)){
 	ref.tmp <- ref.example[i:(i+nCG-1)]
 	# find the reads that fully overlap with nCG CpG
@@ -36,16 +37,13 @@ while(i < length(ref.example)){
 	# if the number of reads < min.Cover, move to next segment
 	if(length(unique(ov@subjectHits)) >= min.Cover){
 		gals.tmp <- gals[ov@subjectHits]
+		N = length(gals.tmp)
 		res <- lapply(1:length(gals.tmp), function(j){
 			str <- mcols(gals.tmp)$seq[[j]][start(ref.tmp) - start(gals.tmp)[j] + 1]
-			vec = NULL
-			if(countPattern(str, 'A') + countPattern(str, 'G')==0){
-				vec <- c(0, 1)[as.integer(substring(as.character(str), 1:nCG, 1:nCG)=="C")+1]		
-			}
-			vec
+			as.character(str)
 		})
-		do.call(rbind, res)
-		
+		freq <- table(do.call(rbind, res))/N
+		ME <- sum(- freq * log(freq))/nCG
 		break	
 	}	
 	i = i + step
