@@ -3,10 +3,15 @@ library(pasillaBamSubset)
 library(GenomicRanges)
 library(Rsamtools)
 library(GenomicAlignments)
+library(BSgenome.Hsapiens.UCSC.hg19)
 
 sel.chr = 'chr1'; # chromosome index
+nCG = 6; # number of CpG in each segments
+min.Cover = 10; # min coverage to be counteds
+step = 4; # window moves 2 CpG each time
+num.cores = 20
+
 # load CpG reference
-library(BSgenome.Hsapiens.UCSC.hg19)
 genome <- BSgenome.Hsapiens.UCSC.hg19
 genome.sub <- genome[[sel.chr]]
 ref <- matchPattern("CG", genome.sub, max.mismatch=0)
@@ -20,37 +25,82 @@ flag <- scanBamFlag(isMinusStrand = FALSE)
 param <- ScanBamParam(which=which, what=what, flag=flag)
 gals <- readGAlignments(bam.name, param=param)
 
-# find the CpG overlaped with reads regions
-ov <- findOverlaps(ref, gals)
-ref.example <- ref[unique(ov@queryHits)]
+# identify regions with coverage greater than min.Cover
+peaks <- slice(coverage(gals)[[sel.chr]], lower=min.Cover)
+peaks.gr <- GRanges(seqnames=sel.chr, IRanges(start(peaks), end(peaks)))
 
-# 
-nCG = 4; # number of CpG in each segments
-min.Cover = 10; # min coverage to be counteds
-step = 2; # window moves 2 CpG each time
-i = 1; 
+# filter peaks containing CpG less than nCG and split peaks to possible segments
+ov <- findOverlaps(ref, peaks.gr)
+sel.ind.CG <- Filter(function(x){length(x)>=nCG}, split(ov@queryHits, ov@subjectHits))
+peaks.filter.gr <- peaks.gr[as.integer(names(groups))]
 
-while(i < length(ref.example)){
+# filter reads not overlapped with filtered peaks
+ov <- findOverlaps(gals, peaks.filter.gr)
+sel.ind.gals <- split(ov@queryHits, ov@subjectHits)
+
+
+i = 1; j = 1 
+
+
+ref.tmp <- ref[sel.ind.CG[[i]][j]:sel.ind.CG[[i]][(j+nCG-1)]]
+gals.tmp <- gals[sel.ind.gals[[i]]]
+segments.tmp.gr <- GRanges(seqnames=sel.chr, IRanges(start(ref.tmp)[1], end(ref.tmp)[nCG]))
+ov <- findOverlaps(segments.tmp.gr, gals.tmp, type="within")
+
+
+
+
+
+
+
+
+sel.ind <- CG.in.peaks[[i]]
+
+ov <- findOverlaps(segments.gr, gals, type="within")
+
+
+
+
+
+ov <- findOverlaps(gals, peaks.gr)
+gals.filtered <- gals[unique(ov@queryHits)]
+
+
+i = 1; j = 1
+ref.example <- ref[groups.filtered[[i]]]
+ref.tmp <- ref.example[i:(i+nCG-1)]
+# find the reads that fully cover nCG CpGs
+segments.gr <- GRanges(seqnames=sel.chr, IRanges(start(ref.example)[j], end(ref.example)[(j+nCG-1)]))
+ov <- findOverlaps(segments.gr, gals, type="within")
+
+
+
+#i = 91
+res <- mclapply(seq(1, length(ref.example)-nCG-1, by=step), function(i){
+	# nCG consecutive CpG
 	ref.tmp <- ref.example[i:(i+nCG-1)]
-	# find the reads that fully overlap with nCG CpG
-	ov <- findOverlaps(GRanges(seqnames=sel.chr, IRanges(start(ref.example)[i], end(ref.example)[(i+nCG-1)])), gals, type="within")
+	# find the reads that fully cover nCG CpGs
+	segments.gr <- GRanges(seqnames=sel.chr, IRanges(start(ref.example)[i], end(ref.example)[(i+nCG-1)]))
+	ov <- findOverlaps(segments.gr, gals, type="within")
 	# if the number of reads < min.Cover, move to next segment
 	if(length(unique(ov@subjectHits)) >= min.Cover){
-		gals.tmp <- gals[ov@subjectHits]
-		N = length(gals.tmp)
-		res <- lapply(1:length(gals.tmp), function(j){
-			str <- mcols(gals.tmp)$seq[[j]][start(ref.tmp) - start(gals.tmp)[j] + 1]
-			as.character(str)
+		# get the full reads
+		reads <- gals[ov@subjectHits]
+		# calculate methylation entropy
+		res <- lapply(1:length(reads), function(j){
+			str <- mcols(reads)$seq[[j]][start(ref.tmp) - start(reads)[j] + 1]
+			if(countPattern("C", str) + countPattern("T", str) == nCG){return(as.character(str))}
 		})
-		freq <- table(do.call(rbind, res))/N
+		freq <- table(do.call(rbind, res))/sum(table(do.call(rbind, res)))
 		ME <- sum(- freq * log(freq))/nCG
-		break	
-	}	
-	i = i + step
-}
+		segments.gr$ME <- ME
+		return(segments.gr)
+	}
+}, mc.cores=num.cores)
 
-ref1 <- GRanges(seqnames="chr1", IRanges(start=2999964, end=3000007))
-ov <- findOverlaps(ref1, gals, type="within")
+segments.gr <- do.call(c, do.call(c, unname(res)))
+
+
 
 
 
