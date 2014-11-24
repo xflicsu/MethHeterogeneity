@@ -4,37 +4,51 @@ library(GenomicRanges)
 library(Rsamtools)
 library(GenomicAlignments)
 
-# load in the reads from 3000000 to 3500000 on chr1 plus strand
+sel.chr = 'chr1'; # chromosome index
+# load CpG reference
+library(BSgenome.Hsapiens.UCSC.hg19)
+genome <- BSgenome.Hsapiens.UCSC.hg19
+genome.sub <- genome[[sel.chr]]
+ref <- matchPattern("CG", genome.sub, max.mismatch=0)
+ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
+
+# load in the reads from 3000000 to 3500000 on chr1 plus strand as an example
+bam.name <- "/data/illumina_runs/data10/r3fang/allc_filtered/allc_h1_db/h1_processed_reads_no_clonal.bam"
 which <- GRanges("chr1", IRanges(3000000, 3500000))
 what <- c("flag", "cigar", "seq")
 flag <- scanBamFlag(isMinusStrand = FALSE)
 param <- ScanBamParam(which=which, what=what, flag=flag)
-un1 <- "h1_processed_reads_no_clonal.bam"
-gals <- readGAlignments(un1, param=param)
+gals <- readGAlignments(bam.name, param=param)
 
-file = "allc/hg19.chr1.CpG"
-dat <- scan(file, what=list(chr=character(0), start=integer(0)), sep=sep)  
-ref <- GRanges(seqnames=dat$chr, IRanges(start=dat$start, width=1))
+# find the CpG overlaped with reads regions
 ov <- findOverlaps(ref, gals)
-ref.sub <- ref[unique(ov@queryHits)]
+ref.example <- ref[unique(ov@queryHits)]
 
-i = 2
-while(i < length(ref.sub)){
-	ref2 <- ref.sub[i:(i+3)]
-	ref1 <- GRanges(seqnames="chr1", IRanges(start(ref.sub)[i], end(ref.sub)[i+3]))
-	ov <- findOverlaps(ref1, gals, type="within")
-	gals1=gals[ov@subjectHits]
-	for(j in 1:length(gals1)){
-		str <- mcols(gals1)$seq[[j]][start(ref2) - start(gals1)[j] + 1]
-		print(str)
-	}
-	
-	mcols(gals1)$seq[[1]][start(ref2) - start(gals1)[1] + 1]
-	mcols(gals1)$seq[[2]][start(ref2) - start(gals1)[2] + 1]
-	mcols(gals1)$seq[[3]][start(ref2) - start(gals1)[3] + 1]
-	
-	if(length(ov) > 2) break
-	i = i+2
+# 
+nCG = 4; # number of CpG in each segments
+min.Cover = 10; # min coverage to be counteds
+step = 2; # window moves 2 CpG each time
+i = 1; 
+while(i < length(ref.example)){
+	ref.tmp <- ref.example[i:(i+nCG-1)]
+	# find the reads that fully overlap with nCG CpG
+	ov <- findOverlaps(GRanges(seqnames=sel.chr, IRanges(start(ref.example)[i], end(ref.example)[(i+nCG-1)])), gals, type="within")
+	# if the number of reads < min.Cover, move to next segment
+	if(length(unique(ov@subjectHits)) >= min.Cover){
+		gals.tmp <- gals[ov@subjectHits]
+		res <- lapply(1:length(gals.tmp), function(j){
+			str <- mcols(gals.tmp)$seq[[j]][start(ref.tmp) - start(gals.tmp)[j] + 1]
+			vec = NULL
+			if(countPattern(str, 'A') + countPattern(str, 'G')==0){
+				vec <- c(0, 1)[as.integer(substring(as.character(str), 1:nCG, 1:nCG)=="C")+1]		
+			}
+			vec
+		})
+		do.call(rbind, res)
+		
+		break	
+	}	
+	i = i + step
 }
 
 ref1 <- GRanges(seqnames="chr1", IRanges(start=2999964, end=3000007))
