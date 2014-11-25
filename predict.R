@@ -1,4 +1,22 @@
 # Predicting Methylation Heterogeneity Regions (MHRs). 
+bf <- BamFile(un1, yieldSize=100000)
+
+open(bf) 
+chuck <- readGAlignments(un1, param=param)
+close(bf)
+
+cvg <- NULL
+repeat {
+ chunk <- readGAlignments(bf)
+ if (length(chunk) == 0L)
+ break
+ chunk_cvg <- coverage(chunk)
+ if (is.null(cvg)) {
+ cvg <- chunk_cvg
+ } else {
+ cvg <- cvg + chunk_cvg
+ }
+}
 
 # load the package
 library(pasillaBamSubset)
@@ -6,6 +24,8 @@ library(GenomicRanges)
 library(Rsamtools)
 library(GenomicAlignments)
 library(BSgenome.Hsapiens.UCSC.hg19)
+
+
 
 
 # load CpG reference
@@ -16,10 +36,9 @@ ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
 
 # load in the reads from 3000000 to 3500000 on chr1 plus strand as an example
 bam.name <- "/data/illumina_runs/data10/r3fang/allc_filtered/allc_h1_db/h1_processed_reads_no_clonal.bam"
-which <- GRanges("chr1", IRanges(3000000, 10000000))
-what <- c("flag", "cigar", "seq")
-flag <- scanBamFlag(isMinusStrand = FALSE)
-param <- ScanBamParam(which=which, what=what, flag=flag)
+which <- GRanges("chr1", IRanges(3000000, 4000000))
+what <- c("seq")
+param <- ScanBamParam(which=which, what=what)
 gals <- readGAlignments(bam.name, param=param)
 
 
@@ -139,23 +158,4 @@ segments.gr <- do.call(c, do.call(c, unname(res)))
 
 
 
-
-bf <- BamFile(un1, yieldSize=100000)
-
-open(bf) 
-chuck <- readGAlignments(un1, param=param)
-close(bf)
-
-cvg <- NULL
-repeat {
- chunk <- readGAlignments(bf)
- if (length(chunk) == 0L)
- break
- chunk_cvg <- coverage(chunk)
- if (is.null(cvg)) {
- cvg <- chunk_cvg
- } else {
- cvg <- cvg + chunk_cvg
- }
-}
 
