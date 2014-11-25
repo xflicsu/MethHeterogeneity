@@ -20,18 +20,23 @@ bam.name <- "/data/illumina_runs/data10/r3fang/allc_filtered/allc_h1_db/h1_proce
 sel.chr = 'chr1'; # chromosome index
 sel.start = min(start(ref));
 sel.end = max(start(ref));
-yieldSize=10000000;
-nCG = 4; # number of CpG in each segments
+chunkSize=10000000;
+#chunkSize=1000000;
+nCG = 6; # number of CpG in each segments
 min.Cover = 10; # min coverage to be counteds
-step = 2; # window moves 2 CpG each time
+step = 3; # window moves 2 CpG each time
 num.cores = 20
 
-MHRs.gr <- GRanges()
-for(sel.start in seq(min(start(ref)) - 500, max(start(ref)) + yieldSize, by=yieldSize)){
-	which <- GRanges(sel.chr, IRanges(sel.start, sel.start + yieldSize))
+#max(start(ref)) + chunkSize
+
+MHRs.gr <- GRanges(seqlengths=seqlengths(genome)[1:24])
+for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkSize)[1:4]){
+	print(sel.start)
+	which <- GRanges(sel.chr, IRanges(sel.start, sel.start + chunkSize))
 	what <- c("seq")
 	param <- ScanBamParam(which=which, what=what)
 	gals <- readGAlignments(bam.name, param=param)
+	strand(gals) = "*"
 	# identify regions with coverage greater than min.Cover
 	peaks <- slice(coverage(gals)[[sel.chr]], lower=min.Cover)
 	peaks.gr <- GRanges(seqnames=sel.chr, IRanges(start(peaks), end(peaks)))
@@ -42,15 +47,16 @@ for(sel.start in seq(min(start(ref)) - 500, max(start(ref)) + yieldSize, by=yiel
 	# filter reads not overlapped with filtered peaks
 	ov <- findOverlaps(gals, peaks.filter.gr)
 	sel.ind.gals <- split(ov@queryHits, ov@subjectHits)
+	
 	res <- mclapply(1:length(sel.ind.gals), function(i){
 		# get the index of CpG within a peak with extending to another n/2 CpG.
-		sel.ind.CG.extended <- seq(min(sel.ind.CG[[i]])-nCG, max(sel.ind.CG[[i]])+nCG)
-		res <- lapply(seq(1, length(sel.ind.CG.extended)-nCG+1, by=step), function(k){
+		sel.ind.CG.extended <- seq(max(1, min(sel.ind.CG[[i]])-nCG), min(max(sel.ind.CG[[i]])+nCG, length(ref)))
+		res.tmp <- lapply(seq(1, length(sel.ind.CG.extended)-nCG+1, by=step), function(k){
 			ref.tmp.gr <- ref[sel.ind.CG.extended[k]:sel.ind.CG.extended[(k+nCG-1)]]	
 			# get the reads overlapped with the peak
 			gals.tmp.gr <- gals[sel.ind.gals[[i]]]
 			# segments defined by nCG consecutive CpGs
-			segments.tmp.gr <- GRanges(seqnames=sel.chr, IRanges(start(ref.tmp.gr)[1], end(ref.tmp.gr)[nCG]))	
+			segments.tmp.gr <- GRanges(seqnames=sel.chr, IRanges(start(ref.tmp.gr)[1], end(ref.tmp.gr)[nCG]), seqlengths=seqlengths(genome)[1:24])	
 			# find the full reads that cover the segments
 			ov <- findOverlaps(segments.tmp.gr, gals.tmp.gr, type="within")
 			# only if the segments' coverage > min.Cover
@@ -66,11 +72,13 @@ for(sel.start in seq(min(start(ref)) - 500, max(start(ref)) + yieldSize, by=yiel
 				ME <- sum(- freq * log(freq))/nCG
 				segments.tmp.gr$ME <- ME
 				return(segments.tmp.gr)
-			}
+				}else{
+					return(GRanges(seqlengths=seqlengths(genome)[1:24]))
+				}
 		})
-		do.call(c, unname(res))
+		do.call(c, unname(res.tmp))
 	}, mc.cores=num.cores)	
-	MHRs.gr = c(MHRs.gr, do.call(c, do.call(c, unname(res))))
+	MHRs.gr = c(MHRs.gr, do.call(c, unname(res)))
 }
 
 
