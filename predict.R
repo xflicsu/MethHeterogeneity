@@ -1,3 +1,6 @@
+# predictMHR("chr1", 1, 1000000, genome, chunkSize=1000, nCG=6, min.Cover=10, step=3, num.cores=20, bam.name, ref.CG)
+
+
 # load the package
 library(pasillaBamSubset)
 library(GenomicRanges)
@@ -5,17 +8,20 @@ library(Rsamtools)
 library(GenomicAlignments)
 library(BSgenome.Hsapiens.UCSC.hg19)
 
-
 # load CpG reference
 genome <- BSgenome.Hsapiens.UCSC.hg19
-genome.sub <- genome[[sel.chr]]
-ref <- matchPattern("CG", genome.sub, max.mismatch=0)
-ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
+#genome.sub <- genome[[sel.chr]]
+#ref <- matchPattern("CG", genome.sub, max.mismatch=0)
+#ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
 
 # load in the reads from 3000000 to 3500000 on chr1 plus strand as an example
 bam.name <- "/data/illumina_runs/data10/r3fang/allc_filtered/allc_h1_db/h1_processed_reads_no_clonal.bam"
 
 # Predicting Methylation Heterogeneity Regions (MHRs). 
+MHR.gr <- predictMHR("chr1", 300000, 1000000000, chunkSize=1000000, nCG=6, min.Cover=10, step=3, num.cores=20, bam.name)
+
+
+
 
 sel.chr = 'chr1'; # chromosome index
 sel.start = min(start(ref));
