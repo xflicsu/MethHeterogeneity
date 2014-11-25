@@ -1,5 +1,6 @@
-# predictMHR("chr1", 1, 1000000, genome, chunkSize=1000, nCG=6, min.Cover=10, step=3, num.cores=20, bam.name, ref.CG)
+# Predicting Methylation Heterogeneity Regions (MHRs). 
 
+# predictMHR(bam.name, "chr1", 1, 1000000, genome, chunkSize=1000, nCG=6, min.Cover=10, step=3, num.cores=20)
 
 # load the package
 library(pasillaBamSubset)
@@ -10,39 +11,35 @@ library(BSgenome.Hsapiens.UCSC.hg19)
 
 # load CpG reference
 genome <- BSgenome.Hsapiens.UCSC.hg19
-#genome.sub <- genome[[sel.chr]]
-#ref <- matchPattern("CG", genome.sub, max.mismatch=0)
-#ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
+genome.sub <- genome[[sel.chr]]
+ref <- matchPattern("CG", genome.sub, max.mismatch=0)
+ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
 
 # load in the reads from 3000000 to 3500000 on chr1 plus strand as an example
 bam.name <- "/data/illumina_runs/data10/r3fang/allc_filtered/allc_h1_db/h1_processed_reads_no_clonal.bam"
 
-# Predicting Methylation Heterogeneity Regions (MHRs). 
 MHR.gr <- predictMHR("chr1", 300000, 1000000000, chunkSize=1000000, nCG=6, min.Cover=10, step=3, num.cores=20, bam.name)
-
-
-
 
 sel.chr = 'chr1'; # chromosome index
 sel.start = min(start(ref));
 sel.end = max(start(ref));
 chunkSize=10000000;
 #chunkSize=1000000;
-nCG = 6; # number of CpG in each segments
-min.Cover = 10; # min coverage to be counteds
-step = 3; # window moves 2 CpG each time
+nCG = 4; # number of CpG in each segments
+min.Cover = 8; # min coverage to be counteds
+step = 2; # window moves 2 CpG each time
 num.cores = 20
 
 #max(start(ref)) + chunkSize
 
 MHRs.gr <- GRanges(seqlengths=seqlengths(genome)[1:24])
-for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkSize)[1:4]){
+for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkSize)){
 	print(sel.start)
 	which <- GRanges(sel.chr, IRanges(sel.start, sel.start + chunkSize))
 	what <- c("seq")
-	param <- ScanBamParam(which=which, what=what)
+	flag <- scanBamFlag(isMinusStrand = FALSE)
+	param <- ScanBamParam(which=which, what=what, flag=flag)
 	gals <- readGAlignments(bam.name, param=param)
-	strand(gals) = "*"
 	# identify regions with coverage greater than min.Cover
 	peaks <- slice(coverage(gals)[[sel.chr]], lower=min.Cover)
 	peaks.gr <- GRanges(seqnames=sel.chr, IRanges(start(peaks), end(peaks)))
