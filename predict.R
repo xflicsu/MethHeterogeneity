@@ -1,11 +1,11 @@
-#  	Predicting Methylation Heterogeneity Regions (MHRs). 
+# Predicting Methylation Heterogeneity Regions (MHRs). 
+
 # load the package
 library(pasillaBamSubset)
 library(GenomicRanges)
 library(Rsamtools)
 library(GenomicAlignments)
 library(BSgenome.Hsapiens.UCSC.hg19)
-
 
 
 # load CpG reference
@@ -16,16 +16,23 @@ ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
 
 # load in the reads from 3000000 to 3500000 on chr1 plus strand as an example
 bam.name <- "/data/illumina_runs/data10/r3fang/allc_filtered/allc_h1_db/h1_processed_reads_no_clonal.bam"
-which <- GRanges("chr1", IRanges(3000000, 6000000))
+which <- GRanges("chr1", IRanges(3000000, 10000000))
 what <- c("flag", "cigar", "seq")
 flag <- scanBamFlag(isMinusStrand = FALSE)
 param <- ScanBamParam(which=which, what=what, flag=flag)
 gals <- readGAlignments(bam.name, param=param)
 
-# identify regions with coverage greater than min.Cover
 
+sel.chr = 'chr1'; # chromosome index
+nCG = 4; # number of CpG in each segments
+min.Cover = 10; # min coverage to be counteds
+step = 2; # window moves 2 CpG each time
+num.cores = 20
+
+# identify regions with coverage greater than min.Cover
 peaks <- slice(coverage(gals)[[sel.chr]], lower=min.Cover)
 peaks.gr <- GRanges(seqnames=sel.chr, IRanges(start(peaks), end(peaks)))
+
 
 # filter peaks containing CpG less than nCG and split peaks to possible segments
 ov <- findOverlaps(ref, peaks.gr)
@@ -35,14 +42,6 @@ peaks.filter.gr <- peaks.gr[as.integer(names(sel.ind.CG))]
 # filter reads not overlapped with filtered peaks
 ov <- findOverlaps(gals, peaks.filter.gr)
 sel.ind.gals <- split(ov@queryHits, ov@subjectHits)
-
-
-sel.chr = 'chr1'; # chromosome index
-nCG = 6; # number of CpG in each segments
-min.Cover = 5; # min coverage to be counteds
-step = 4; # window moves 2 CpG each time
-num.cores = 20
-
 
 
 res <- mclapply(1:length(sel.ind.gals), function(i){
@@ -73,40 +72,48 @@ res <- mclapply(1:length(sel.ind.gals), function(i){
 	})
 	do.call(c, unname(res))
 }, mc.cores=num.cores)	
-
 MHRs.gr <- do.call(c, do.call(c, unname(res)))
 
 
 
 
-####################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+# below this is the old version without any improvement but as a gold standard
+
+# load the package
+library(pasillaBamSubset)
+library(GenomicRanges)
+library(Rsamtools)
+library(GenomicAlignments)
+library(BSgenome.Hsapiens.UCSC.hg19)
 
 
+# load CpG reference
+genome <- BSgenome.Hsapiens.UCSC.hg19
+genome.sub <- genome[[sel.chr]]
+ref <- matchPattern("CG", genome.sub, max.mismatch=0)
+ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
+
+# load in the reads from 3000000 to 3500000 on chr1 plus strand as an example
+bam.name <- "/data/illumina_runs/data10/r3fang/allc_filtered/allc_h1_db/h1_processed_reads_no_clonal.bam"
+which <- GRanges("chr1", IRanges(3000000, 4000000))
+what <- c("flag", "cigar", "seq")
+flag <- scanBamFlag(isMinusStrand = FALSE)
+param <- ScanBamParam(which=which, what=what, flag=flag)
+gals <- readGAlignments(bam.name, param=param)
 
 
+sel.chr = 'chr1'; # chromosome index
+nCG = 6; # number of CpG in each segments
+min.Cover = 10; # min coverage to be counteds
+step = 4; # window moves 2 CpG each time
+num.cores = 20
 
-sel.ind <- CG.in.peaks[[i]]
+ov <- findOverlaps(ref, GRanges("chr1", IRanges(3000000, 4000000)))
+ref.example <- ref[ov@queryHits]
 
-ov <- findOverlaps(segments.gr, gals, type="within")
-
-
-
-
-
-ov <- findOverlaps(gals, peaks.gr)
-gals.filtered <- gals[unique(ov@queryHits)]
-
-
-i = 1; j = 1
-ref.example <- ref[groups.filtered[[i]]]
-ref.tmp <- ref.example[i:(i+nCG-1)]
-# find the reads that fully cover nCG CpGs
-segments.gr <- GRanges(seqnames=sel.chr, IRanges(start(ref.example)[j], end(ref.example)[(j+nCG-1)]))
-ov <- findOverlaps(segments.gr, gals, type="within")
-
-
-
-#i = 91
 res <- mclapply(seq(1, length(ref.example)-nCG-1, by=step), function(i){
 	# nCG consecutive CpG
 	ref.tmp <- ref.example[i:(i+nCG-1)]
@@ -128,9 +135,7 @@ res <- mclapply(seq(1, length(ref.example)-nCG-1, by=step), function(i){
 		return(segments.gr)
 	}
 }, mc.cores=num.cores)
-
 segments.gr <- do.call(c, do.call(c, unname(res)))
-
 
 
 
