@@ -35,7 +35,8 @@ num.cores = 20
 MHRs.gr <- GRanges(seqlengths=seqlengths(genome)[1:24])
 for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkSize)){
 	print(sel.start)
-	which <- GRanges(sel.chr, IRanges(sel.start, sel.start + chunkSize))
+	#which <- GRanges(sel.chr, IRanges(sel.start, sel.start + chunkSize))
+	which <- GRanges("chr6", IRanges(min(start(ref)), max(start(ref))))
 	what <- c("seq")
 	flag <- scanBamFlag(isMinusStrand = FALSE)
 	param <- ScanBamParam(which=which, what=what, flag=flag)
@@ -47,8 +48,10 @@ for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkS
 	ov <- findOverlaps(ref, peaks.gr)
 	sel.ind.CG <- Filter(function(x){length(x)>=nCG}, split(ov@queryHits, ov@subjectHits))
 	peaks.filter.gr <- peaks.gr[as.integer(names(sel.ind.CG))]
+	# sum(width(peaks.filter.gr))/(max(end(ref)) - min(start(ref)))
 	# filter reads not overlapped with filtered peaks
 	ov <- findOverlaps(gals, peaks.filter.gr)
+	# length(unique(ov@queryHits))
 	sel.ind.gals <- split(ov@queryHits, ov@subjectHits)
 	
 	res <- mclapply(1:length(sel.ind.gals), function(i){
