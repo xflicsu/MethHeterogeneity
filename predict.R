@@ -23,20 +23,18 @@ MHR.gr <- predictMHR("chr1", 300000, 1000000000, chunkSize=1000000, nCG=6, min.C
 sel.chr = 'chr1'; # chromosome index
 sel.start = min(start(ref));
 sel.end = max(start(ref));
-chunkSize=10000000;
 #chunkSize=1000000;
 nCG = 6; # number of CpG in each segments
 min.Cover = 10; # min coverage to be counteds
-step = 2; # window moves 2 CpG each time
 num.cores = 20
-
-#max(start(ref)) + chunkSize
+chunkNum=20;
+chunkSeq <- seq(min(start(ref)) - 500, max(end(ref)) + 500, length.out=chunkNum)
 
 MHRs.gr <- GRanges(seqlengths=seqlengths(genome)[1:24])
-for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkSize)){
-	
+for(m in 1:(length(chunkSeq)-1)){
+	gals.start <- chunkSeq[m]; gals.end <- chunkSeq[m+1]
 	# Step I: loading all reads within given  chunk regions.
-	which <- GRanges(sel.chr, IRanges(sel.start, sel.start + chunkSize))
+	which <- GRanges(sel.chr, IRanges(gals.start, gals.end))
 	what <- c("seq")
 	flag <- scanBamFlag(isMinusStrand = FALSE)
 	param <- ScanBamParam(which=which, what=what, flag=flag)
@@ -56,7 +54,7 @@ for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkS
 	res <- mclapply(peak.CG.ind, function(x){
 		res <- lapply(seq(1, (length(x)-nCG+1)), function(i){
 			ind.tmp <- x[i:(i+nCG-1)]	
-			gr.tmp <- GRanges(seqnames=sel.chr, IRanges(start=start(ref)[ind.tmp[1]], end=end(ref)[ind.tmp[nCG]]))		
+			gr.tmp <- GRanges(seqnames=sel.chr, IRanges(start=start(ref)[ind.tmp[1]], end=end(ref)[ind.tmp[nCG]]), seqlengths=seqlengths(genome)[1:24])		
 		})	
 		do.call(c, unname(res))
 	}, mc.cores=num.cores)
@@ -65,12 +63,11 @@ for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkS
 	# Step V: find all the segments in the high-coverage regions.
 	ov <- findOverlaps(segments.gr, gals, type="within")
 	segment.read.ind <- Filter(function(x){length(x)>=min.Cover}, split(ov@subjectHits, ov@queryHits))
-
 	ov <- findOverlaps(segments.gr, ref)
 	segment.CG.ind <- split(ov@subjectHits, ov@queryHits)	
 	
 	# Step VI: calculate ME
-	mclapply(names(segment.read.ind), function(x){
+	res <- mclapply(names(segment.read.ind), function(x){
 		segment.tmp <- segments.gr[as.integer(x)]
 		reads.tmp <- gals[segment.read.ind[[x]]]
 		CG.tmp <- ref[segment.CG.ind[[x]]]
@@ -82,48 +79,25 @@ for(sel.start in seq(min(start(ref)) - 500, max(end(ref)) + chunkSize, by=chunkS
 		freq <- table(do.call(rbind, mathPatterns))/sum(table(do.call(rbind, mathPatterns)))
 		ME <- sum(-freq * log(freq))/nCG
 		segment.tmp$ME <- ME	
-		return(segments.tmp)	
-	}, mc.cores=num.cores)
-	
-	
-	# sum(width(peaks.filter.gr))/(max(end(ref)) - min(start(ref)))
-	# filter reads not overlapped with filtered peaks
-	ov <- findOverlaps(gals, peaks.filter.gr)
-	# length(unique(ov@queryHits))
-	sel.ind.gals <- split(ov@queryHits, ov@subjectHits)
-	
-	res <- mclapply(1:length(sel.ind.gals), function(i){
-		# get the index of CpG within a peak with extending to another n/2 CpG.
-		sel.ind.CG.extended <- seq(max(1, min(sel.ind.CG[[i]])-nCG), min(max(sel.ind.CG[[i]])+nCG, length(ref)))
-		res.tmp <- lapply(seq(1, length(sel.ind.CG.extended)-nCG+1, by=step), function(k){
-			ref.tmp.gr <- ref[sel.ind.CG.extended[k]:sel.ind.CG.extended[(k+nCG-1)]]	
-			# get the reads overlapped with the peak
-			gals.tmp.gr <- gals[sel.ind.gals[[i]]]
-			# segments defined by nCG consecutive CpGs
-			segments.tmp.gr <- GRanges(seqnames=sel.chr, IRanges(start(ref.tmp.gr)[1], end(ref.tmp.gr)[nCG]), seqlengths=seqlengths(genome)[1:24])	
-			# find the full reads that cover the segments
-			ov <- findOverlaps(segments.tmp.gr, gals.tmp.gr, type="within")
-			# only if the segments' coverage > min.Cover
-			if(length(unique(ov@subjectHits)) >= min.Cover){
-				# get the full reads
-				reads <- gals.tmp.gr[ov@subjectHits]
-				# calculate methylation entropy
-				seqs <- lapply(1:length(reads), function(j){
-					str <- mcols(reads)$seq[[j]][start(ref.tmp.gr) - start(reads)[j] + 1]
-					if(countPattern("C", str) + countPattern("T", str) == nCG){return(as.character(str))}
-				})			
-				freq <- table(do.call(rbind, seqs))/sum(table(do.call(rbind, seqs)))
-				ME <- sum(- freq * log(freq))/nCG
-				segments.tmp.gr$ME <- ME
-				return(segments.tmp.gr)
-				}else{
-					return(GRanges(seqlengths=seqlengths(genome)[1:24]))
-				}
-		})
-		do.call(c, unname(res.tmp))
+		return(segment.tmp)	
 	}, mc.cores=num.cores)	
-	MHRs.gr = c(MHRs.gr, do.call(c, unname(res)))
+		
+	segments.gr <- do.call(c, unname(res))
+	MHRs.gr <- c(MHRs.gr, segments.gr)	
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
