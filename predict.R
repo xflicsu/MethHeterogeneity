@@ -18,9 +18,8 @@ ref <- GRanges(seqnames=sel.chr, IRanges(start(ref), width=1))
 # load in the reads from 3000000 to 3500000 on chr1 plus strand as an example
 bam.name <- "/data/home/yupeng/test_BSEQC/h1_processed_reads_no_clonal.bam"
 
-MHR.gr <- predictMHR("chr1", 300000, 1000000000, chunkSize=1000000, nCG=6, min.Cover=10, step=3, num.cores=20, bam.name)
 
-sel.chr = 'chr1'; # chromosome index
+sel.chr = 'chr4'; # chromosome index
 sel.start = min(start(ref));
 sel.end = max(start(ref));
 #chunkSize=1000000;
@@ -30,7 +29,7 @@ num.cores = 20
 chunkNum=20;
 chunkSeq <- seq(min(start(ref)) - 500, max(end(ref)) + 500, length.out=chunkNum)
 
-MHRs.gr <- GRanges(seqlengths=seqlengths(genome)[1:24])
+#MHRs.gr <- GRanges(seqlengths=seqlengths(genome)[1:24])
 for(m in 1:(length(chunkSeq)-1)){
 	gals.start <- chunkSeq[m]; gals.end <- chunkSeq[m+1]
 	# Step I: loading all reads within given  chunk regions.
